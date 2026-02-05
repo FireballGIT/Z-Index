@@ -154,33 +154,52 @@ class Vault:
 
 
     # -------- UNLOCK FOLDER --------
-    def unlock(self, zindex_file: str):
-        zindex_path = Path(zindex_file)
+    def unlock(self, zindex_file: str, zindex_path: str, keep_vault: bool) -> str:
+        zindex_path = Path(zindex_path)
         if not zindex_path.exists() or zindex_path.suffix != ".zindex":
-            raise FileNotFoundError(f".zindex file not found: {zindex_path}")
+            raise FileNotFoundError(f"Invalid .zindex file: {zindex_path}")
 
-        # Read vault info
         with open(zindex_path, "r") as f:
-            data = json.load(f)
+            zdata = json.load(f)
 
-        vault_folder = APPDATA_VAULTS / f"{data['vault_id']}.vlt"
-        original_folder = Path(data["folder"])
+        original_folder = Path(zdata["folder"])
+        vault_id = zdata["vault_id"]
+        stored_hash = bytes.fromhex(zdata["password"])
+        salt = bytes.fromhex(zdata["salt"])
+
+        if hash_password(password, salt) != stored_hash:
+            raise ValueError("Incorrect password")
+
+        possible_roots = [
+            Path.home() / "zindex" / "vaults"
+            APPDATA_VAULTS
+        ]
+
+        vault_folder = None
+        for root in possible_roots:
+            canidate = root / f"{vault_id}.vlt"
+            if canidate.exists():
+                vault_folder = canidate
+                break
+
+        if vault_folder is None:
+            raise FileNotFoundError("Vault not found")
+
         blob_file = vault_folder / "vault.zb"
-
         if not blob_file.exists():
-            raise FileNotFoundError(f"Vault blob not found: {blob_file}")
+            raise FileNotFoundError("Blob file missing")
 
-        # Prompt for password
-        pw_input = getpass("Enter password: ")
-        hashed_input = hash_password(pw_input, bytes.fromhex(data["salt"]))
+        original_folder.parent.mkdir(parents=True, exist_ok=True)
 
-        if hashed_input.hex() != data["password"]:
-            print("[Z-Index] Wrong password!")
-            return
+        key_bytes = password.encode("utf-8").ljust(32, b"\0")
+        aes_decrypt_folder(blob_file, original_folder, key_bytes)
 
-        # Decrypt .zb back to folder
-        aes_decrypt_blob(blob_file, pw_input.encode('utf-8').ljust(32, b'\0'), original_folder)
+        if not keep_vault:
+            shutil.rmtree(vault_folder)
+            zindex_path.unlink()
 
-        print(f"[Z-Index] Folder restored to {original_folder}")
+        if self.debug:
+            print(f"[DEBUG] Restored folder: {original_folder}")
+            print(f"[DEBUG] Vault used: {vault_folder}")
 
-
+        return str(original_folder)
