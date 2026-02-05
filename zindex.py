@@ -136,7 +136,7 @@ class Vault:
 
         # Add custom folder icon
         desktop_ini = vault_folder / "desktop.ini"
-        icon_path = Path(r"C:\Users\gafut\Downloads\Untitled Design (6).ico")
+        icon_path = Path(__file__).parent / "assets" / "Untitled Design (6).ico"
 
         with open(desktop_ini, "w") as f:
             f.write("[.ShellClassInfo]\n")
@@ -182,4 +182,5 @@ class Vault:
         aes_decrypt_blob(blob_file, pw_input.encode('utf-8').ljust(32, b'\0'), original_folder)
 
         print(f"[Z-Index] Folder restored to {original_folder}")
+
 
